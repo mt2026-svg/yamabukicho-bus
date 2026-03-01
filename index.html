@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>山吹町 バス接近情報</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@700;800&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --toei-green: #008542;
+      --orange: #F5A623;
+      --orange-dark: #E09010;
+      --bg: #ffffff;
+      --text-main: #1a1a1a;
+      --text-sub: #999999;
+      --border: #e8e8e8;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      color: var(--text-main);
+      max-width: 480px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── トップバー ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .select-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .select-wrap select {
+      appearance: none;
+      background: #f4f4f4;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 28px 7px 12px;
+      font-size: 13px;
+      font-family: 'Noto Sans JP', sans-serif;
+      font-weight: 500;
+      color: var(--text-main);
+      cursor: pointer;
+      outline: none;
+    }
+    .select-wrap::after {
+      content: '▾';
+      position: absolute;
+      right: 9px;
+      font-size: 11px;
+      color: #666;
+      pointer-events: none;
+    }
+    .speed-btn {
+      background: #1a1a1a;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 7px 13px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: 'Noto Sans JP', sans-serif;
+      white-space: nowrap;
+    }
+    .speed-btn.on { background: var(--orange); }
+    .demo-badge {
+      margin-left: auto;
+      font-size: 13px;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    /* ── メイン ── */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 44px 24px 16px;
+      text-align: center;
+    }
+    .dest-name {
+      font-size: 22px;
+      color: var(--text-sub);
+      font-weight: 400;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+    .train-type {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-main);
+      letter-spacing: 0.05em;
+      margin-bottom: 22px;
+    }
+    .countdown-label {
+      font-size: 15px;
+      color: var(--text-sub);
+      letter-spacing: 0.35em;
+      margin-bottom: 6px;
+    }
+
+    /* カウントダウン数字 */
+    .countdown-main {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      line-height: 1;
+      margin-bottom: 26px;
+    }
+    .cd-num {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-weight: 800;
+      font-size: 100px;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    .cd-unit {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin: 0 3px 14px;
+    }
+    .cd-cents {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-weight: 700;
+      font-size: 54px;
+      color: var(--text-main);
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    /* 到着表示 */
+    .arriving-display {
+      display: none;
+      margin-bottom: 26px;
+    }
+    .arriving-text {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-size: 60px;
+      font-weight: 800;
+      color: var(--orange);
+    }
+
+    /* 方面バッジ */
+    .direction-badge {
+      background: var(--orange);
+      color: #fff;
+      border-radius: 50px;
+      padding: 11px 36px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      margin-bottom: 32px;
+    }
+
+    /* ── リスト ── */
+    .list-area {
+      width: 100%;
+      padding: 0 16px;
+    }
+    .bus-row {
+      display: flex;
+      align-items: center;
+      padding: 16px 20px;
+      border-radius: 14px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+    .bus-row.row-next {
+      border: 2px solid var(--orange);
+    }
+    .bus-row.row-later {
+      border: none;
+      padding-left: 22px;
+    }
+    .bus-row.row-later::before {
+      content: '';
+      position: absolute;
+      left: 6px;
+      top: 6px; bottom: 6px;
+      width: 3px;
+      border-radius: 2px;
+      background: linear-gradient(to bottom, rgba(245,166,35,0.45), rgba(245,166,35,0.08));
+    }
+    .row-label {
+      font-size: 12px;
+      color: var(--text-sub);
+      min-width: 44px;
+    }
+    .row-type {
+      font-size: 19px;
+      font-weight: 700;
+      flex: 1;
+      margin-left: 8px;
+    }
+    .bus-row.row-next .row-type { color: var(--text-main); }
+    .bus-row.row-later .row-type { color: #aaa; }
+    .row-time {
+      font-family: 'Archivo Narrow', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .bus-row.row-next .row-time { color: var(--text-main); }
+    .bus-row.row-later .row-time { color: #aaa; }
+
+    /* ── タブ ── */
+    .tab-bar {
+      display: flex;
+      border-top: 1px solid var(--border);
+      margin-top: 16px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 14px 0;
+      border: none;
+      background: #fff;
+      font-size: 13px;
+      font-family: 'Noto Sans JP', sans-serif;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      color: #aaa;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      border-bottom-color: var(--orange);
+      color: var(--text-main);
+      font-weight: 700;
+    }
+
+    /* ── 広告 ── */
+    .ad-area {
+      background: #fff;
+      border-top: 1px solid var(--border);
+    }
+    .ad-inner {
+      min-height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .credit-line {
+      text-align: center;
+      font-size: 10px;
+      color: #ccc;
+      padding: 4px 0 8px;
+    }
+
+    /* shimmer */
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #f8f8f8 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: sh 1.3s infinite;
+      border-radius: 10px;
+    }
+    @keyframes sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  </style>
+</head>
+<body>
+
+<!-- トップバー -->
+<div class="topbar">
+  <div class="select-wrap">
+    <select id="operatorSelect">
+      <option value="Toei">都営バス</option>
+    </select>
+  </div>
+  <div class="select-wrap">
+    <select id="busstopSelect">
+      <option value="Yamabukicho">山吹町</option>
+    </select>
+  </div>
+  <button class="speed-btn" id="speedBtn" onclick="toggleSpeed()">10倍速OFF</button>
+  <span class="demo-badge" id="demoLabel" style="display:none;">Demo Mode</span>
+</div>
+
+<!-- メイン表示 -->
+<div class="main-area">
+  <div id="destName" class="dest-name">読み込み中…</div>
+  <div id="trainType" class="train-type"></div>
+
+  <div class="countdown-label" id="cdLabel">発 車 ま で あ と</div>
+
+  <div class="countdown-main" id="cdNormal">
+    <span class="cd-num" id="cdMin">--</span>
+    <span class="cd-unit">分</span>
+    <span class="cd-num" id="cdSec">--</span>
+    <span class="cd-unit">秒</span>
+    <span class="cd-cents" id="cdCents">--</span>
+  </div>
+
+  <div class="arriving-display" id="cdArriving">
+    <div class="arriving-text">まもなく到着</div>
+  </div>
+
+  <div class="direction-badge" id="directionBadge">方面</div>
+</div>
+
+<!-- 後続バスリスト -->
+<div class="list-area" id="listArea">
+  <div class="shimmer" style="height:58px;margin-bottom:10px;"></div>
+  <div class="shimmer" style="height:58px;margin-bottom:10px;opacity:.6;"></div>
+  <div class="shimmer" style="height:58px;opacity:.3;"></div>
+</div>
+
+<!-- タブ -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-shinjuku" onclick="switchTab('shinjuku')">← 新宿駅西口</button>
+  <button class="tab-btn" id="tab-iidabashi" onclick="switchTab('iidabashi')">飯田橋・九段下 →</button>
+</div>
+
+<!-- 広告 -->
+<div class="ad-area">
+  <div class="ad-inner" id="adSlot">
+    <!-- 忍者AD スクリプトをここに挿入 -->
+  </div>
+  <div class="credit-line">東京都交通局のデータを活用しています。</div>
+</div>
+
+<!-- ビルド時に GitHub Actions が生成するトークンファイル -->
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
