@@ -1,25 +1,17 @@
 /**
  * 都営バス 山吹町 リアルタイム接近情報
- * ODPT API v4
- * トークンは config.js (GitHub Actions が生成) の window.ODPT_CONFIG.accessToken から取得
+ * Cloudflare Worker プロキシ経由で ODPT API から時刻表を取得
  */
 
-const BUSSTOP_ID  = 'odpt.Busstop:Toei.Yamabukicho';
-const ARRIVAL_URL = 'https://api.odpt.org/api/4.0/odpt:BusPassingInformation';
-
-// ── トークン取得 ──────────────────────────────────────
-function getAccessToken() {
-  return window.ODPT_CONFIG?.accessToken || '';
-}
+const PROXY_URL = 'https://odpt-proxy.takahara-design.workers.dev';
 
 // ── 状態 ──────────────────────────────────────────────
 let currentTab  = 'shinjuku';
 let allArrivals = { shinjuku: [], iidabashi: [] };
 let tickTimer   = null;
 let fetchTimer  = null;
-let isDemo      = false;
 let speedMode   = false;
-let speedOffset = 0;    // ms、10倍速で蓄積
+let speedOffset = 0;
 let lastTickAt  = null;
 
 // ── 方面判定 ──────────────────────────────────────────
@@ -30,18 +22,24 @@ function classifyDirection(destName) {
   return null;
 }
 
-// ── 時刻ユーティリティ ────────────────────────────────
-function parseTime(str) {
-  if (!str) return null;
-  // "HH:MM" or "HH:MM:SS"
-  if (/^\d{2}:\d{2}/.test(str)) {
-    const [hh, mm, ss] = str.split(':').map(Number);
-    const d = new Date();
-    d.setHours(hh, mm, ss || 0, 0);
-    if (d < Date.now() - 60000) d.setDate(d.getDate() + 1);
-    return d;
-  }
-  return new Date(str);
+// ── 曜日判定 ──────────────────────────────────────────
+function getTodayCalendar() {
+  const day = new Date().getDay();
+  if (day === 0) return 'Sunday';
+  if (day === 6) return 'Saturday';
+  return 'Weekday';
+}
+
+// ── 時刻文字列 → 今日のDateオブジェクト ──────────────
+function timeStrToDate(hhmm) {
+  if (!hhmm) return null;
+  const [hRaw, mm] = hhmm.split(':').map(Number);
+  const h = hRaw >= 24 ? hRaw - 24 : hRaw;
+  const dayOffset = hRaw >= 24 ? 1 : 0;
+  const d = new Date();
+  d.setHours(h, mm, 0, 0);
+  d.setDate(d.getDate() + dayOffset);
+  return d;
 }
 
 function formatHHMM(d) {
@@ -56,74 +54,72 @@ function msUntilEffective(d) {
   return d.getTime() - getEffectiveNow();
 }
 
-// ── フェッチ ──────────────────────────────────────────
-async function fetchArrivals() {
-  const token = getAccessToken();
-  if (!token) {
-    console.warn('ODPT_ACCESS_TOKEN が設定されていません。デモモードで動作します。');
-    useDemo();
-    return;
-  }
-
+// ── API フェッチ ──────────────────────────────────────
+async function fetchTimetable() {
   try {
-    const url = `${ARRIVAL_URL}?odpt:busstop=${encodeURIComponent(BUSSTOP_ID)}&acl:consumerKey=${encodeURIComponent(token)}`;
-    const res  = await fetch(url);
+    const res = await fetch(PROXY_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    processData(data);
+    processTimetable(data);
   } catch (e) {
     console.warn('フェッチ失敗、デモモードにフォールバック:', e.message);
     useDemo();
   }
 }
 
-function processData(data) {
-  const result = { shinjuku: [], iidabashi: [] };
+function processTimetable(timetables) {
+  const calendar = getTodayCalendar();
+  const now      = getEffectiveNow();
+  const result   = { shinjuku: [], iidabashi: [] };
 
-  for (const item of data) {
+  for (const tt of timetables) {
+    // カレンダーフィルタ
+    const cal = tt['odpt:calendar'] || '';
+    if (cal && !cal.includes(calendar) && !cal.includes('Holiday')) continue;
+
     const destName =
-      item['odpt:destinationBusstopTitle']?.ja ||
-      item['odpt:toStationTitle']?.ja ||
-      item['odpt:destinationBusstop'] || '';
+      tt['odpt:destinationBusstopPoleTitle']?.ja ||
+      tt['odpt:destinationBusstopTitle']?.ja ||
+      tt['odpt:destinationBusstop'] || '';
 
     const dir = classifyDirection(destName);
     if (!dir) continue;
 
-    const etaStr =
-      item['odpt:estimatedArrivalTime'] ||
-      item['odpt:expectedArrivalTime']  ||
-      item['odpt:arrivalTime'];
+    const route =
+      (tt['odpt:busroutePattern'] || tt['odpt:busRoute'] || '').match(/\.([^.]+)$/)?.[1] || '';
 
-    const eta = parseTime(etaStr);
-    if (!eta) continue;
-    if (eta.getTime() - Date.now() < -60000) continue; // 1分以上過去はスキップ
+    const busTimes = tt['odpt:busstopPoleTimetableObject'] || [];
+    for (const obj of busTimes) {
+      const timeStr = obj['odpt:departureTime'] || obj['odpt:arrivalTime'];
+      const eta = timeStrToDate(timeStr);
+      if (!eta) continue;
+      if (eta.getTime() < now - 60000) continue;
 
-    const routeRaw = item['odpt:busroutePattern'] || item['odpt:busRoute'] || '';
-    const route = routeRaw.match(/\.([^.]+)$/)?.[1] || routeRaw;
-
-    result[dir].push({ eta, destName, route });
+      result[dir].push({ eta, destName, route });
+    }
   }
 
   for (const dir of ['shinjuku', 'iidabashi']) {
     result[dir].sort((a, b) => a.eta - b.eta);
+    result[dir] = result[dir].slice(0, 10);
+  }
+
+  const total = result.shinjuku.length + result.iidabashi.length;
+  if (total === 0) {
+    console.warn('該当データなし。デモモードにフォールバック。');
+    useDemo();
+    return;
   }
 
   allArrivals = result;
-  isDemo = false;
   document.getElementById('demoLabel').style.display = 'none';
   renderAll();
 }
 
 // ── デモデータ ────────────────────────────────────────
 function useDemo() {
-  isDemo = true;
   document.getElementById('demoLabel').style.display = 'inline';
-  resetDemoData();
-  renderAll();
-}
-
-function resetDemoData() {
-  const base = Date.now() + speedOffset;
+  const base = getEffectiveNow();
   allArrivals = {
     shinjuku: [
       { eta: new Date(base + 4*60000 + 44000), destName: '新宿駅西口', route: '早77' },
@@ -136,6 +132,7 @@ function resetDemoData() {
       { eta: new Date(base + 28*60000),         destName: '早稲田',   route: '早77' },
     ]
   };
+  renderAll();
 }
 
 // ── タブ ──────────────────────────────────────────────
@@ -146,17 +143,13 @@ function switchTab(tab) {
   renderAll();
 }
 
-// ── 10倍速 ────────────────────────────────────────────
-function toggleSpeed() {
-  speedMode = !speedMode;
-  const btn = document.getElementById('speedBtn');
-  btn.textContent = speedMode ? '10倍速ON' : '10倍速OFF';
-  btn.classList.toggle('on', speedMode);
-  lastTickAt = Date.now();
-}
-
 // ── レンダリング ──────────────────────────────────────
 function renderAll() {
+  const now = getEffectiveNow();
+  for (const dir of ['shinjuku', 'iidabashi']) {
+    allArrivals[dir] = (allArrivals[dir] || []).filter(b => b.eta.getTime() > now - 60000);
+  }
+
   const buses = allArrivals[currentTab];
   if (!buses || buses.length === 0) { renderEmpty(); return; }
   renderNextBus(buses[0]);
@@ -167,8 +160,8 @@ function renderNextBus(bus) {
   const ms   = msUntilEffective(bus.eta);
   const secs = ms / 1000;
 
-  document.getElementById('destName').textContent      = bus.destName || '―';
-  document.getElementById('trainType').textContent     = bus.route    || '';
+  document.getElementById('destName').textContent       = bus.destName || '―';
+  document.getElementById('trainType').textContent      = bus.route    || '';
   document.getElementById('directionBadge').textContent = bus.destName || '―';
 
   const cdNormal   = document.getElementById('cdNormal');
@@ -216,15 +209,15 @@ function renderList(buses) {
 }
 
 function renderEmpty() {
-  document.getElementById('destName').textContent      = 'データなし';
-  document.getElementById('trainType').textContent     = '';
+  document.getElementById('destName').textContent       = 'データなし';
+  document.getElementById('trainType').textContent      = '';
   document.getElementById('directionBadge').textContent = '―';
-  document.getElementById('cdMin').textContent         = '--';
-  document.getElementById('cdSec').textContent         = '--';
-  document.getElementById('cdCents').textContent       = '--';
-  document.getElementById('cdNormal').style.display    = 'flex';
-  document.getElementById('cdArriving').style.display  = 'none';
-  document.getElementById('listArea').innerHTML        =
+  document.getElementById('cdMin').textContent          = '--';
+  document.getElementById('cdSec').textContent          = '--';
+  document.getElementById('cdCents').textContent        = '--';
+  document.getElementById('cdNormal').style.display     = 'flex';
+  document.getElementById('cdArriving').style.display   = 'none';
+  document.getElementById('listArea').innerHTML         =
     '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">この方面のバス情報がありません</div>';
 }
 
@@ -232,33 +225,24 @@ function renderEmpty() {
 function tick() {
   const now = Date.now();
   if (speedMode && lastTickAt !== null) {
-    speedOffset += (now - lastTickAt) * 9; // 10倍速
+    speedOffset += (now - lastTickAt) * 9;
   }
   lastTickAt = now;
-
   renderAll();
-
-  // デモ：全バス過ぎたらリセット
-  if (isDemo) {
-    const all = [...(allArrivals.shinjuku || []), ...(allArrivals.iidabashi || [])];
-    if (all.every(b => msUntilEffective(b.eta) < -5000)) {
-      resetDemoData();
-    }
-  }
 }
 
-// ── 30秒ごと再フェッチ ────────────────────────────────
+// ── 30分おきに再フェッチ ──────────────────────────────
 function scheduleRefetch() {
   clearTimeout(fetchTimer);
   fetchTimer = setTimeout(async () => {
-    await fetchArrivals();
+    await fetchTimetable();
     scheduleRefetch();
-  }, 30000);
+  }, 30 * 60 * 1000); // 時刻表は30分おきで十分
 }
 
 // ── 初期化 ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   lastTickAt = Date.now();
-  fetchArrivals().then(scheduleRefetch);
-  tickTimer = setInterval(tick, 50); // ~20fps
+  fetchTimetable().then(scheduleRefetch);
+  tickTimer = setInterval(tick, 50);
 });
