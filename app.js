@@ -112,13 +112,13 @@ function processTimetable(timetables) {
   }
 
   allArrivals = result;
-  document.getElementById('demoLabel').style.display = 'none';
+  
   renderAll();
 }
 
 // ── デモデータ ────────────────────────────────────────
 function useDemo() {
-  document.getElementById('demoLabel').style.display = 'inline';
+  
   const base = getEffectiveNow();
   allArrivals = {
     shinjuku: [
