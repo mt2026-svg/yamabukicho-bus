@@ -69,19 +69,6 @@
       color: #666;
       pointer-events: none;
     }
-    .speed-btn {
-      background: #1a1a1a;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      padding: 7px 13px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
-      font-family: 'Noto Sans JP', sans-serif;
-      white-space: nowrap;
-    }
-    .speed-btn.on { background: var(--orange); }
     .demo-badge {
       margin-left: auto;
       font-size: 13px;
@@ -227,12 +214,15 @@
     /* ── タブ ── */
     .tab-bar {
       display: flex;
-      border-top: 1px solid var(--border);
-      margin-top: 16px;
+      border-bottom: 1px solid var(--border);
+      background: #fff;
+      position: sticky;
+      top: 57px; /* topbar の高さ分 */
+      z-index: 9;
     }
     .tab-btn {
       flex: 1;
-      padding: 14px 0;
+      padding: 13px 0;
       border: none;
       background: #fff;
       font-size: 13px;
@@ -291,8 +281,13 @@
       <option value="Yamabukicho">山吹町</option>
     </select>
   </div>
-  <button class="speed-btn" id="speedBtn" onclick="toggleSpeed()">10倍速OFF</button>
   <span class="demo-badge" id="demoLabel" style="display:none;">Demo Mode</span>
+</div>
+
+<!-- タブ（上部） -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-shinjuku" onclick="switchTab('shinjuku')">← 新宿駅西口</button>
+  <button class="tab-btn" id="tab-iidabashi" onclick="switchTab('iidabashi')">飯田橋・九段下 →</button>
 </div>
 
 <!-- メイン表示 -->
@@ -324,16 +319,9 @@
   <div class="shimmer" style="height:58px;opacity:.3;"></div>
 </div>
 
-<!-- タブ -->
-<div class="tab-bar">
-  <button class="tab-btn active" id="tab-shinjuku" onclick="switchTab('shinjuku')">← 新宿駅西口</button>
-  <button class="tab-btn" id="tab-iidabashi" onclick="switchTab('iidabashi')">飯田橋・九段下 →</button>
-</div>
-
 <!-- 広告 -->
 <div class="ad-area">
-  <div class="ad-inner" id="adSlot">
-    <!-- admax -->
+  <d<!-- admax -->
 <script src="https://adm.shinobi.jp/s/02791f6792c76e7426317acf442bfb88"></script>
 <!-- admax -->
   </div>
