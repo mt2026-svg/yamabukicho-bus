@@ -3,7 +3,7 @@
  * Cloudflare Worker プロキシ経由で ODPT API から時刻表を取得
  */
 
-const PROXY_URL = 'https://odpt-proxy2.takahara-design.workers.dev';
+const PROXY_URL = 'https://odpt-proxy.takahara-design.workers.dev';
 
 // ── 状態 ──────────────────────────────────────────────
 let currentTab  = 'shinjuku';
