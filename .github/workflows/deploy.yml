@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-  # 手動実行も可能にする
   workflow_dispatch:
 
 permissions:
@@ -26,19 +25,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      # ── ビルド時にトークンを config.js へ書き込む ──
-      - name: Inject ODPT token into config.js
-        run: |
-          cat > config.js << 'ENDOFFILE'
-          // このファイルは GitHub Actions によって自動生成されます。
-          // リポジトリにコミットしないでください（.gitignore に追加推奨）。
-          window.ODPT_CONFIG = {
-            accessToken: "__ODPT_TOKEN__"
-          };
-          ENDOFFILE
-          # 実際のトークンに置換
-          sed -i "s/__ODPT_TOKEN__/${{ secrets.ODPT_ACCESS_TOKEN }}/" config.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
