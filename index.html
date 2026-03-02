@@ -161,6 +161,15 @@
       margin-bottom: 32px;
     }
 
+    /* 発車予定時刻 */
+    .depart-time {
+      font-size: 14px;
+      color: var(--text-sub);
+      letter-spacing: 0.05em;
+      margin-top: -20px;
+      margin-bottom: 16px;
+    }
+
     /* ── リスト ── */
     .list-area {
       width: 100%;
@@ -320,6 +329,7 @@
   </div>
 
   <div class="direction-badge" id="directionBadge">方面</div>
+  <div class="depart-time" id="departTime"></div>
 </div>
 
 <!-- 後続バスリスト -->
@@ -331,10 +341,10 @@
 
 <!-- 広告 -->
 <div class="ad-area">
+  <div class="credit-line">MTDesignworks: 東京都交通局・公共交通オープンデータ協議会</div>
   <div class="ad-inner" id="adSlot">
     <!-- 忍者AD スクリプトをここに挿入 -->
   </div>
-  <div class="credit-line">東京都交通局のデータを活用しています。</div>
 </div>
 
 <script src="app.js"></script>

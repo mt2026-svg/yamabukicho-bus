@@ -164,6 +164,7 @@ function renderNextBus(bus) {
   document.getElementById('destName').textContent       = bus.destSign || '―';
   document.getElementById('trainType').textContent      = bus.route    || '';
   document.getElementById('directionBadge').textContent = bus.destSign || '―';
+  document.getElementById('departTime').textContent     = `発車予定 ${formatHHMM(bus.eta)}`;
 
   const cdNormal   = document.getElementById('cdNormal');
   const cdArriving = document.getElementById('cdArriving');
@@ -213,6 +214,7 @@ function renderEmpty() {
   document.getElementById('destName').textContent       = 'データなし';
   document.getElementById('trainType').textContent      = '';
   document.getElementById('directionBadge').textContent = '―';
+  document.getElementById('departTime').textContent     = '';
   document.getElementById('cdMin').textContent          = '--';
   document.getElementById('cdSec').textContent          = '--';
   document.getElementById('cdCents').textContent        = '--';
