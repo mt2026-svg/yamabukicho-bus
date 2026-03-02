@@ -23,15 +23,14 @@ function getTodayType() {
 }
 
 // ── 状態 ──────────────────────────────────────────────
-let currentTab  = 'shinjuku';
-let allArrivals = { shinjuku: [], nerima: [] };
+let currentTab   = 'shinjuku';
+let allArrivals  = { shinjuku: [], nerima: [] };
+let firstBusTime = null;  // 翌日始発のDate
 let endOfService = false;
-let tickTimer   = null;
-let fetchTimer  = null;
-let speedMode   = false;
-let speedOffset = 0;
-let lastTickAt  = null;
-let endOfService = false;
+let tickTimer    = null;
+let fetchTimer   = null;
+let speedOffset  = 0;
+let lastTickAt   = null;
 
 // ── 方面判定 ──────────────────────────────────────────
 function classifyDirection(destSign) {
@@ -42,11 +41,12 @@ function classifyDirection(destSign) {
 }
 
 // ── 時刻 → Date ──────────────────────────────────────
-function timeStrToDate(hhmm) {
+function timeStrToDate(hhmm, tomorrow) {
   if (!hhmm) return null;
   const [hRaw, mm] = hhmm.split(':').map(Number);
   const h = hRaw >= 24 ? hRaw - 24 : hRaw;
   const d = new Date();
+  if (tomorrow) d.setDate(d.getDate() + 1);
   d.setHours(h, mm, 0, 0);
   if (hRaw >= 24) d.setDate(d.getDate() + 1);
   return d;
@@ -59,7 +59,6 @@ function formatHHMM(d) {
 function getEffectiveNow() { return Date.now() + speedOffset; }
 function msUntil(d) { return d.getTime() - getEffectiveNow(); }
 
-// null安全なsetText
 function setText(id, val) {
   const el = document.getElementById(id);
   if (el) el.textContent = val;
@@ -78,7 +77,9 @@ async function fetchTimetable() {
     processTimetable(data);
   } catch (e) {
     console.warn('フェッチ失敗:', e.message);
-    renderEndOfService();
+    endOfService = true;
+    firstBusTime = null;
+    renderAll();
   }
 }
 
@@ -86,6 +87,7 @@ function processTimetable(timetables) {
   const todayType = getTodayType();
   const now       = getEffectiveNow();
   const result    = { shinjuku: [], nerima: [] };
+  let   earliest  = null;
 
   for (const tt of timetables) {
     const pole = tt['odpt:busstopPole'] || '';
@@ -93,8 +95,7 @@ function processTimetable(timetables) {
 
     const calId   = (tt['odpt:calendar'] || '').split('Calendar:')[1] || '';
     const calType = CALENDAR_MAP[calId];
-    if (!calType) continue;
-    if (calType !== todayType) continue;
+    if (!calType || calType !== todayType) continue;
 
     const objs = tt['odpt:busstopPoleTimetableObject'] || [];
     if (!objs.length) continue;
@@ -104,13 +105,18 @@ function processTimetable(timetables) {
     if (!dir) continue;
 
     const routeRaw = tt['odpt:busroute'] || tt['odpt:busroutePattern'] || '';
-    const routeKey = routeRaw.split('.').pop() || '';
-    const route    = ROUTE_NAMES[routeKey] || routeKey;
+    const route    = ROUTE_NAMES[routeRaw.split('.').pop()] || routeRaw.split('.').pop();
 
     for (const obj of objs) {
-      const eta = timeStrToDate(obj['odpt:departureTime'] || obj['odpt:arrivalTime']);
-      if (!eta) continue;
-      if (eta.getTime() < now - 60000) continue;
+      const timeStr = obj['odpt:departureTime'] || obj['odpt:arrivalTime'];
+      if (!timeStr) continue;
+
+      // 明日の始発候補
+      const etaTomorrow = timeStrToDate(timeStr, true);
+      if (!earliest || etaTomorrow < earliest) earliest = etaTomorrow;
+
+      const eta = timeStrToDate(timeStr, false);
+      if (!eta || eta.getTime() < now - 60000) continue;
       result[dir].push({ eta, destSign, route });
     }
   }
@@ -119,7 +125,7 @@ function processTimetable(timetables) {
     result[dir].sort((a, b) => a.eta - b.eta);
     const seen = new Set();
     result[dir] = result[dir].filter(b => {
-      const key = `${dir}-${b.eta.getHours()}-${b.eta.getMinutes()}`;
+      const key = `${b.eta.getHours()}-${b.eta.getMinutes()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
@@ -128,63 +134,34 @@ function processTimetable(timetables) {
   }
 
   const total = result.shinjuku.length + result.nerima.length;
-  if (total === 0) { renderEndOfService(); return; }
-
-  allArrivals = result;
-  renderAll();
-}
-
-// ── デモ ──────────────────────────────────────────────
-function useDemo() {
-  const base = getEffectiveNow();
-  allArrivals = {
-    shinjuku: [
-      { eta: new Date(base + 4*60000 + 44000), destSign: '新宿駅西口', route: '白61' },
-      { eta: new Date(base + 12*60000),         destSign: '新宿駅西口', route: '白61' },
-      { eta: new Date(base + 21*60000),         destSign: '新宿駅西口', route: '白61' },
-    ],
-    nerima: [
-      { eta: new Date(base + 7*60000 + 15000), destSign: '練馬駅',    route: '白61' },
-      { eta: new Date(base + 17*60000),         destSign: '練馬車庫前', route: '白61' },
-      { eta: new Date(base + 28*60000),         destSign: '練馬駅',    route: '白61' },
-    ]
-  };
-  renderAll();
-}
-
-// ── 運行終了 ──────────────────────────────────────────
-function renderEndOfService() {
-  endOfService = true;
-  allArrivals = { shinjuku: [], nerima: [] };
-  const destEl = document.getElementById('destName');
-  if (destEl) {
-    destEl.textContent = '本日の運行は終了しました';
-    destEl.style.color = '#e03030';
-    destEl.style.fontSize = '22px';
+  if (total === 0) {
+    endOfService = true;
+    firstBusTime = earliest;
+    allArrivals  = { shinjuku: [], nerima: [] };
+  } else {
+    endOfService = false;
+    firstBusTime = earliest;
+    allArrivals  = result;
   }
-  setText('trainType', '');
-  setText('directionBadge', '');
-  setText('departTime', '');
-  setDisplay('cdLabel', 'none');
-  setDisplay('cdNormal', 'none');
-  setDisplay('cdArriving', 'none');
-  const listArea = document.getElementById('listArea');
-  if (listArea) listArea.innerHTML =
-    '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">翌日の時刻表は始発時刻よりご確認ください</div>';
+  renderAll();
 }
 
 // ── タブ ──────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  document.getElementById('tab-shinjuku').classList.toggle('active', tab === 'shinjuku');
-  document.getElementById('tab-nerima').classList.toggle('active', tab === 'nerima');
+  const sh = document.getElementById('tab-shinjuku');
+  const ne = document.getElementById('tab-nerima');
+  if (sh) sh.classList.toggle('active', tab === 'shinjuku');
+  if (ne) ne.classList.toggle('active', tab === 'nerima');
   renderAll();
 }
 
-// ── レンダリング ──────────────────────────────────────
+// ── メインレンダリング ─────────────────────────────────
 function renderAll() {
-  if (endOfService) return;
-  if (endOfService) return;
+  if (endOfService) {
+    renderEndOfService();
+    return;
+  }
   const now = getEffectiveNow();
   for (const dir of ['shinjuku', 'nerima']) {
     allArrivals[dir] = (allArrivals[dir] || []).filter(b => b.eta.getTime() > now - 60000);
@@ -195,42 +172,86 @@ function renderAll() {
   renderList(buses.slice(1));
 }
 
-function renderNextBus(bus) {
-  const ms   = msUntil(bus.eta);
-  const secs = ms / 1000;
+// ── 運行終了 or 始発カウントダウン ────────────────────
+function renderEndOfService() {
+  const now         = getEffectiveNow();
+  const msToFirst   = firstBusTime ? firstBusTime.getTime() - now : Infinity;
+  const SIXTY_MIN   = 60 * 60 * 1000;
 
-  setText('destName', bus.destSign || '―');
-  setText('trainType', bus.route    || '');
+  setText('trainType', '');
+  setText('directionBadge', '');
+  setDisplay('cdArriving', 'none');
+  setDisplay('cdLabel', 'none');
+
+  const destEl = document.getElementById('destName');
+
+  if (firstBusTime && msToFirst > 0 && msToFirst <= SIXTY_MIN) {
+    // ── 始発60分前：カウントダウン ──
+    if (destEl) {
+      destEl.textContent   = '始発まであと';
+      destEl.style.color   = 'var(--text-sub)';
+      destEl.style.fontSize = '';
+    }
+    setText('departTime', `始発 ${formatHHMM(firstBusTime)} 発`);
+    setDisplay('cdNormal', 'flex');
+
+    const totalSecs = Math.floor(msToFirst / 1000);
+    setText('cdMin',   String(Math.floor(totalSecs / 60)).padStart(2, '0'));
+    setText('cdSec',   String(totalSecs % 60).padStart(2, '0'));
+    setText('cdCents', String(Math.floor((msToFirst / 1000 - totalSecs) * 100)).padStart(2, '0'));
+  } else {
+    // ── 運行終了メッセージ ──
+    if (destEl) {
+      destEl.textContent    = '本日の運行は終了しました';
+      destEl.style.color    = '#e03030';
+      destEl.style.fontSize = '20px';
+    }
+    setText('departTime', firstBusTime ? `始発 ${formatHHMM(firstBusTime)}` : '');
+    setDisplay('cdNormal', 'none');
+  }
+
+  const listArea = document.getElementById('listArea');
+  if (listArea) listArea.innerHTML =
+    '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">翌日の時刻表は始発時刻よりご確認ください</div>';
+}
+
+// ── 次のバス表示 ──────────────────────────────────────
+function renderNextBus(bus) {
+  const secs = msUntil(bus.eta) / 1000;
+
+  const destEl = document.getElementById('destName');
+  if (destEl) { destEl.style.color = ''; destEl.style.fontSize = ''; }
+
+  setText('destName',      bus.destSign || '―');
+  setText('trainType',     bus.route    || '');
   setText('directionBadge', bus.destSign || '―');
-  setText('departTime', `発車予定 ${formatHHMM(bus.eta)}`);
+  setText('departTime',    `発車予定 ${formatHHMM(bus.eta)}`);
 
   const cdNormal   = document.getElementById('cdNormal');
   const cdArriving = document.getElementById('cdArriving');
   const cdLabel    = document.getElementById('cdLabel');
 
   if (secs <= 0) {
-    cdNormal.style.display   = 'none';
-    cdArriving.style.display = 'block';
-    cdLabel.style.display    = 'none';
+    if (cdNormal)   cdNormal.style.display   = 'none';
+    if (cdArriving) cdArriving.style.display = 'block';
+    if (cdLabel)    cdLabel.style.display    = 'none';
     return;
   }
 
-  cdNormal.style.display   = 'flex';
-  cdArriving.style.display = 'none';
-  cdLabel.style.display    = 'block';
+  if (cdNormal)   cdNormal.style.display   = 'flex';
+  if (cdArriving) cdArriving.style.display = 'none';
+  if (cdLabel)    cdLabel.style.display    = 'block';
 
   const totalSecs = Math.floor(secs);
-  const mins      = Math.floor(totalSecs / 60);
-  const secsR     = totalSecs % 60;
-  const cents     = Math.floor((secs - totalSecs) * 100);
-
-  document.getElementById('cdMin').textContent   = String(mins).padStart(2, '0');
-  document.getElementById('cdSec').textContent   = String(secsR).padStart(2, '0');
-  document.getElementById('cdCents').textContent = String(cents).padStart(2, '0');
+  setText('cdMin',   String(Math.floor(totalSecs / 60)).padStart(2, '0'));
+  setText('cdSec',   String(totalSecs % 60).padStart(2, '0'));
+  setText('cdCents', String(Math.floor((secs - totalSecs) * 100)).padStart(2, '0'));
 }
 
+// ── 後続リスト ────────────────────────────────────────
 function renderList(buses) {
   const el = document.getElementById('listArea');
+  if (!el) return;
   if (!buses.length) {
     el.innerHTML = '<div style="text-align:center;color:#bbb;padding:20px;font-size:13px;">後続バスなし</div>';
     return;
@@ -239,8 +260,7 @@ function renderList(buses) {
   el.innerHTML = buses.slice(0, 3).map((bus, i) => {
     const timeStr = msUntil(bus.eta) <= 0 ? 'まもなく' : `${formatHHMM(bus.eta)}発`;
     const cls = i === 0 ? 'bus-row row-next' : 'bus-row row-later';
-    return `
-    <div class="${cls}">
+    return `<div class="${cls}">
       <span class="row-label">${labels[i]}</span>
       <span class="row-type">${bus.destSign || '―'}</span>
       <span class="row-time">${timeStr}</span>
@@ -248,16 +268,17 @@ function renderList(buses) {
   }).join('');
 }
 
+// ── データなし ────────────────────────────────────────
 function renderEmpty() {
   const destEl = document.getElementById('destName');
   if (destEl) { destEl.textContent = 'データなし'; destEl.style.color = ''; destEl.style.fontSize = ''; }
   setText('trainType', '');
   setText('directionBadge', '―');
   setText('departTime', '');
-  setText('cdMin', '--');
-  setText('cdSec', '--');
+  setText('cdMin',   '--');
+  setText('cdSec',   '--');
   setText('cdCents', '--');
-  setDisplay('cdNormal', 'flex');
+  setDisplay('cdNormal',   'flex');
   setDisplay('cdArriving', 'none');
   const listArea = document.getElementById('listArea');
   if (listArea) listArea.innerHTML =
@@ -266,9 +287,7 @@ function renderEmpty() {
 
 // ── tick ──────────────────────────────────────────────
 function tick() {
-  const now = Date.now();
-  if (speedMode && lastTickAt !== null) speedOffset += (now - lastTickAt) * 9;
-  lastTickAt = now;
+  lastTickAt = Date.now();
   renderAll();
 }
 
