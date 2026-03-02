@@ -57,6 +57,16 @@ function formatHHMM(d) {
 function getEffectiveNow() { return Date.now() + speedOffset; }
 function msUntil(d) { return d.getTime() - getEffectiveNow(); }
 
+// null安全なsetText
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function setDisplay(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = val;
+}
+
 // ── フェッチ ──────────────────────────────────────────
 async function fetchTimetable() {
   try {
@@ -143,14 +153,15 @@ function useDemo() {
 // ── 運行終了 ──────────────────────────────────────────
 function renderEndOfService() {
   allArrivals = { shinjuku: [], nerima: [] };
-  document.getElementById('destName').textContent       = '運行終了';
-  document.getElementById('trainType').textContent      = '';
-  document.getElementById('directionBadge').textContent = '―';
-  document.getElementById('departTime').textContent     = '本日の運行は終了しました';
-  document.getElementById('cdLabel').style.display      = 'none';
-  document.getElementById('cdNormal').style.display     = 'none';
-  document.getElementById('cdArriving').style.display   = 'none';
-  document.getElementById('listArea').innerHTML =
+  setText('destName', '運行終了');
+  setText('trainType', '');
+  setText('directionBadge', '―');
+  setText('departTime', '本日の運行は終了しました');
+  setDisplay('cdLabel', 'none');
+  setDisplay('cdNormal', 'none');
+  setDisplay('cdArriving', 'none');
+  const listArea = document.getElementById('listArea');
+  if (listArea) listArea.innerHTML =
     '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">翌日の時刻表は始発時刻よりご確認ください</div>';
 }
 
@@ -178,10 +189,10 @@ function renderNextBus(bus) {
   const ms   = msUntil(bus.eta);
   const secs = ms / 1000;
 
-  document.getElementById('destName').textContent       = bus.destSign || '―';
-  document.getElementById('trainType').textContent      = bus.route    || '';
-  document.getElementById('directionBadge').textContent = bus.destSign || '―';
-  document.getElementById('departTime').textContent     = `発車予定 ${formatHHMM(bus.eta)}`;
+  setText('destName', bus.destSign || '―');
+  setText('trainType', bus.route    || '');
+  setText('directionBadge', bus.destSign || '―');
+  setText('departTime', `発車予定 ${formatHHMM(bus.eta)}`);
 
   const cdNormal   = document.getElementById('cdNormal');
   const cdArriving = document.getElementById('cdArriving');
@@ -228,16 +239,17 @@ function renderList(buses) {
 }
 
 function renderEmpty() {
-  document.getElementById('destName').textContent       = 'データなし';
-  document.getElementById('trainType').textContent      = '';
-  document.getElementById('directionBadge').textContent = '―';
-  document.getElementById('departTime').textContent     = '';
-  document.getElementById('cdMin').textContent          = '--';
-  document.getElementById('cdSec').textContent          = '--';
-  document.getElementById('cdCents').textContent        = '--';
-  document.getElementById('cdNormal').style.display     = 'flex';
-  document.getElementById('cdArriving').style.display   = 'none';
-  document.getElementById('listArea').innerHTML =
+  setText('destName', 'データなし');
+  setText('trainType', '');
+  setText('directionBadge', '―');
+  setText('departTime', '');
+  setText('cdMin', '--');
+  setText('cdSec', '--');
+  setText('cdCents', '--');
+  setDisplay('cdNormal', 'flex');
+  setDisplay('cdArriving', 'none');
+  const listArea = document.getElementById('listArea');
+  if (listArea) listArea.innerHTML =
     '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">この時間帯のバス情報がありません</div>';
 }
 
