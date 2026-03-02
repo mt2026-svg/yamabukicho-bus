@@ -77,7 +77,9 @@ function processTimetable(timetables) {
     // カレンダーフィルタ
     const calId   = (tt['odpt:calendar'] || '').split('Calendar:')[1] || '';
     const calType = CALENDAR_MAP[calId];
-    if (calType && calType !== todayType) continue;
+    // MAPにないカレンダー（37-171, 37-161など重複分）は除外
+    if (!calType) continue;
+    if (calType !== todayType) continue;
 
     const objs = tt['odpt:busstopPoleTimetableObject'] || [];
     if (!objs.length) continue;
