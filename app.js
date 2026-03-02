@@ -1,16 +1,18 @@
 /**
- * 都営バス 山吹町 接近情報
+ * 都営バス 山吹町 / 新宿駅西口 接近情報
  * Cloudflare Worker経由でODPT時刻表を取得
- * 方面: 新宿駅西口 / 練馬・練馬車庫前
  */
 
 const PROXY_URL = 'https://odpt-proxy2.takahara-design.workers.dev';
 
-// カレンダーIDと曜日の対応（重複を避けるため各曜日1種類だけ使う）
 const CALENDAR_MAP = {
-  'Toei.37-170': 'weekday',   // 平日（37-171は同内容なので除外）
-  'Toei.37-160': 'saturday',  // 土曜（37-161は同内容なので除外）
-  'Toei.37-100': 'holiday',   // 日祝
+  'Toei.37-170': 'weekday',
+  'Toei.37-160': 'saturday',
+  'Toei.37-100': 'holiday',
+};
+
+const ROUTE_NAMES = {
+  'Shiro61': '白61', 'Haya77': '早77', 'Shiro62': '白62',
 };
 
 function getTodayType() {
@@ -20,22 +22,46 @@ function getTodayType() {
   return 'weekday';
 }
 
-// ── 状態 ──────────────────────────────────────────────
-let currentTab  = 'shinjuku';
-let allArrivals = { shinjuku: [], nerima: [] };
-let tickTimer   = null;
-let fetchTimer  = null;
-let speedMode   = false;
-let speedOffset = 0;
-let lastTickAt  = null;
+// ── バス停設定 ────────────────────────────────────────
+const BUSSTOP_CONFIG = {
+  yamabukicho: {
+    label: '山吹町',
+    poleFilter: p => p.includes('Yamabukicho'),
+    tabs: [
+      { id: 'shinjuku', label: '← 新宿駅西口' },
+      { id: 'nerima',   label: '練馬・練馬車庫前 →' },
+    ],
+    defaultTab: 'shinjuku',
+    dirFilter: (destSign) => {
+      if (destSign.includes('新宿')) return 'shinjuku';
+      if (destSign.includes('練馬')) return 'nerima';
+      return null;
+    },
+  },
+  shinjuku: {
+    label: '新宿駅西口',
+    poleFilter: p => p.includes('ShinjukuStationNishiguchi'),
+    tabs: [
+      { id: 'nerima', label: '練馬・練馬車庫前 →' },
+    ],
+    defaultTab: 'nerima',
+    dirFilter: (destSign) => {
+      if (destSign.includes('練馬')) return 'nerima';
+      return null;
+    },
+  },
+};
 
-// ── 方面判定 ──────────────────────────────────────────
-function classifyDirection(destSign) {
-  if (!destSign) return null;
-  if (destSign.includes('新宿')) return 'shinjuku';
-  if (destSign.includes('練馬')) return 'nerima';
-  return null;
-}
+// ── 状態 ──────────────────────────────────────────────
+let currentBusstop = 'yamabukicho';
+let currentTab     = 'shinjuku';
+let allArrivals    = { shinjuku: [], nerima: [] };
+let rawTimetables  = [];
+let tickTimer      = null;
+let fetchTimer     = null;
+let speedMode      = false;
+let speedOffset    = 0;
+let lastTickAt     = null;
 
 // ── 時刻 → Date ──────────────────────────────────────
 function timeStrToDate(hhmm) {
@@ -60,8 +86,8 @@ async function fetchTimetable() {
   try {
     const res = await fetch(PROXY_URL);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    processTimetable(data);
+    rawTimetables = await res.json();
+    processTimetable(rawTimetables);
   } catch (e) {
     console.warn('フェッチ失敗:', e.message);
     useDemo();
@@ -69,15 +95,17 @@ async function fetchTimetable() {
 }
 
 function processTimetable(timetables) {
+  const config    = BUSSTOP_CONFIG[currentBusstop];
   const todayType = getTodayType();
   const now       = getEffectiveNow();
   const result    = { shinjuku: [], nerima: [] };
 
   for (const tt of timetables) {
-    // カレンダーフィルタ
+    const pole = tt['odpt:busstopPole'] || '';
+    if (!config.poleFilter(pole)) continue;
+
     const calId   = (tt['odpt:calendar'] || '').split('Calendar:')[1] || '';
     const calType = CALENDAR_MAP[calId];
-    // MAPにないカレンダー（37-171, 37-161など重複分）は除外
     if (!calType) continue;
     if (calType !== todayType) continue;
 
@@ -85,10 +113,12 @@ function processTimetable(timetables) {
     if (!objs.length) continue;
 
     const destSign = objs[0]['odpt:destinationSign'] || '';
-    const dir = classifyDirection(destSign);
+    const dir = config.dirFilter(destSign);
     if (!dir) continue;
 
-    const route = (tt['odpt:busroutePattern'] || '').match(/\.([^.]+)$/)?.[1] || '';
+    const routeRaw = tt['odpt:busroute'] || tt['odpt:busroutePattern'] || '';
+    const routeKey = routeRaw.split('.').pop() || '';
+    const route    = ROUTE_NAMES[routeKey] || routeKey;
 
     for (const obj of objs) {
       const eta = timeStrToDate(obj['odpt:departureTime'] || obj['odpt:arrivalTime']);
@@ -98,12 +128,10 @@ function processTimetable(timetables) {
     }
   }
 
-  // ソート・重複除去（同時刻は1件に統合）
   for (const dir of ['shinjuku', 'nerima']) {
     result[dir].sort((a, b) => a.eta - b.eta);
     const seen = new Set();
     result[dir] = result[dir].filter(b => {
-      // 分単位で重複判定（秒は無視）
       const key = `${dir}-${b.eta.getHours()}-${b.eta.getMinutes()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -119,29 +147,63 @@ function processTimetable(timetables) {
   renderAll();
 }
 
-// ── デモ ──────────────────────────────────────────────
-function useDemo() {
-  const base = getEffectiveNow();
-  allArrivals = {
-    shinjuku: [
-      { eta: new Date(base + 4*60000 + 44000), destSign: '新宿駅西口', route: '早77' },
-      { eta: new Date(base + 12*60000),         destSign: '新宿駅西口', route: '早77' },
-      { eta: new Date(base + 21*60000),         destSign: '新宿駅西口', route: '早77' },
-    ],
-    nerima: [
-      { eta: new Date(base + 7*60000 + 15000), destSign: '練馬駅',    route: '白61' },
-      { eta: new Date(base + 17*60000),         destSign: '練馬車庫前', route: '白61' },
-      { eta: new Date(base + 28*60000),         destSign: '練馬駅',    route: '白61' },
-    ]
-  };
+// ── バス停切り替え ────────────────────────────────────
+function switchBusstop(busstop) {
+  currentBusstop = busstop;
+  const config   = BUSSTOP_CONFIG[busstop];
+
+  // タブを再描画
+  const tabBar = document.querySelector('.tab-bar');
+  tabBar.innerHTML = config.tabs.map((t, i) =>
+    `<button class="tab-btn${i===0?' active':''}" id="tab-${t.id}" onclick="switchTab('${t.id}')">${t.label}</button>`
+  ).join('');
+
+  currentTab = config.defaultTab;
+
+  if (rawTimetables.length > 0) {
+    processTimetable(rawTimetables);
+  } else {
+    fetchTimetable();
+  }
+}
+
+// ── タブ切り替え ──────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  const config = BUSSTOP_CONFIG[currentBusstop];
+  config.tabs.forEach(t => {
+    const el = document.getElementById(`tab-${t.id}`);
+    if (el) el.classList.toggle('active', t.id === tab);
+  });
   renderAll();
 }
 
-// ── タブ ──────────────────────────────────────────────
-function switchTab(tab) {
-  currentTab = tab;
-  document.getElementById('tab-shinjuku').classList.toggle('active', tab === 'shinjuku');
-  document.getElementById('tab-nerima').classList.toggle('active', tab === 'nerima');
+// ── デモ ──────────────────────────────────────────────
+function useDemo() {
+  const base = getEffectiveNow();
+  if (currentBusstop === 'shinjuku') {
+    allArrivals = {
+      shinjuku: [],
+      nerima: [
+        { eta: new Date(base + 6*60000),  destSign: '練馬駅',    route: '白61' },
+        { eta: new Date(base + 16*60000), destSign: '練馬車庫前', route: '白61' },
+        { eta: new Date(base + 26*60000), destSign: '練馬駅',    route: '白61' },
+      ]
+    };
+  } else {
+    allArrivals = {
+      shinjuku: [
+        { eta: new Date(base + 4*60000 + 44000), destSign: '新宿駅西口', route: '白61' },
+        { eta: new Date(base + 12*60000),         destSign: '新宿駅西口', route: '白61' },
+        { eta: new Date(base + 21*60000),         destSign: '新宿駅西口', route: '白61' },
+      ],
+      nerima: [
+        { eta: new Date(base + 7*60000 + 15000), destSign: '練馬駅',    route: '白61' },
+        { eta: new Date(base + 17*60000),         destSign: '練馬車庫前', route: '白61' },
+        { eta: new Date(base + 28*60000),         destSign: '練馬駅',    route: '白61' },
+      ]
+    };
+  }
   renderAll();
 }
 
