@@ -25,11 +25,13 @@ function getTodayType() {
 // ── 状態 ──────────────────────────────────────────────
 let currentTab  = 'shinjuku';
 let allArrivals = { shinjuku: [], nerima: [] };
+let endOfService = false;
 let tickTimer   = null;
 let fetchTimer  = null;
 let speedMode   = false;
 let speedOffset = 0;
 let lastTickAt  = null;
+let endOfService = false;
 
 // ── 方面判定 ──────────────────────────────────────────
 function classifyDirection(destSign) {
@@ -152,6 +154,7 @@ function useDemo() {
 
 // ── 運行終了 ──────────────────────────────────────────
 function renderEndOfService() {
+  endOfService = true;
   allArrivals = { shinjuku: [], nerima: [] };
   const destEl = document.getElementById('destName');
   if (destEl) {
@@ -180,6 +183,8 @@ function switchTab(tab) {
 
 // ── レンダリング ──────────────────────────────────────
 function renderAll() {
+  if (endOfService) return;
+  if (endOfService) return;
   const now = getEffectiveNow();
   for (const dir of ['shinjuku', 'nerima']) {
     allArrivals[dir] = (allArrivals[dir] || []).filter(b => b.eta.getTime() > now - 60000);
@@ -244,7 +249,8 @@ function renderList(buses) {
 }
 
 function renderEmpty() {
-  setText('destName', 'データなし');
+  const destEl = document.getElementById('destName');
+  if (destEl) { destEl.textContent = 'データなし'; destEl.style.color = ''; destEl.style.fontSize = ''; }
   setText('trainType', '');
   setText('directionBadge', '―');
   setText('departTime', '');
