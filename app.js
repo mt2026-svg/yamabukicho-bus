@@ -6,14 +6,11 @@
 
 const PROXY_URL = 'https://odpt-proxy2.takahara-design.workers.dev';
 
-// カレンダーIDと曜日の対応
-// 本数から推測: 37-170/171=平日, 37-160/161=土曜, 37-100=日祝
+// カレンダーIDと曜日の対応（重複を避けるため各曜日1種類だけ使う）
 const CALENDAR_MAP = {
-  'Toei.37-170': 'weekday',
-  'Toei.37-171': 'weekday',
-  'Toei.37-160': 'saturday',
-  'Toei.37-161': 'saturday',
-  'Toei.37-100': 'holiday',
+  'Toei.37-170': 'weekday',   // 平日（37-171は同内容なので除外）
+  'Toei.37-160': 'saturday',  // 土曜（37-161は同内容なので除外）
+  'Toei.37-100': 'holiday',   // 日祝
 };
 
 function getTodayType() {
@@ -99,13 +96,13 @@ function processTimetable(timetables) {
     }
   }
 
-  // ソート・重複除去（同時刻は1件に）
+  // ソート・重複除去（同時刻は1件に統合）
   for (const dir of ['shinjuku', 'nerima']) {
     result[dir].sort((a, b) => a.eta - b.eta);
-    // 同じ時刻の重複を除去
     const seen = new Set();
     result[dir] = result[dir].filter(b => {
-      const key = b.eta.getTime();
+      // 分単位で重複判定（秒は無視）
+      const key = `${dir}-${b.eta.getHours()}-${b.eta.getMinutes()}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
