@@ -153,10 +153,15 @@ function useDemo() {
 // ── 運行終了 ──────────────────────────────────────────
 function renderEndOfService() {
   allArrivals = { shinjuku: [], nerima: [] };
-  setText('destName', '運行終了');
+  const destEl = document.getElementById('destName');
+  if (destEl) {
+    destEl.textContent = '本日の運行は終了しました';
+    destEl.style.color = '#e03030';
+    destEl.style.fontSize = '22px';
+  }
   setText('trainType', '');
-  setText('directionBadge', '―');
-  setText('departTime', '本日の運行は終了しました');
+  setText('directionBadge', '');
+  setText('departTime', '');
   setDisplay('cdLabel', 'none');
   setDisplay('cdNormal', 'none');
   setDisplay('cdArriving', 'none');
