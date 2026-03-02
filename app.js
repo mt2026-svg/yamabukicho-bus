@@ -136,6 +136,7 @@ function processTimetable(timetables) {
   }
 
   const total = result.shinjuku.length + result.nerima.length;
+  console.log(`[DEBUG] total=${total} earliest=${earliest ? formatHHMM(earliest) : 'none'} now=${formatHHMM(new Date(now))}`);
   if (total === 0) {
     endOfService = true;
     firstBusTime = earliest;
