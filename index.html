@@ -266,6 +266,17 @@
     }
     @keyframes sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
   </style>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#F5A623">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="山吹町バス">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js');
+    }
+  </script>
 </head>
 <body>
 
@@ -321,9 +332,7 @@
 <!-- 広告 -->
 <div class="ad-area">
   <div class="ad-inner" id="adSlot">
-    <!-- admax -->
-<script src="https://adm.shinobi.jp/s/02791f6792c76e7426317acf442bfb88"></script>
-<!-- admax -->
+    <!-- 忍者AD スクリプトをここに挿入 -->
   </div>
   <div class="credit-line">東京都交通局のデータを活用しています。</div>
 </div>

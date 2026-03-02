@@ -1,0 +1,13 @@
+{
+  "name": "山吹町 バス接近情報",
+  "short_name": "山吹町バス",
+  "description": "都営バス 山吹町のリアルタイム接近情報",
+  "start_url": "/yamabukicho-bus/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#F5A623",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
