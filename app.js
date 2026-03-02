@@ -176,48 +176,8 @@ function renderAll() {
   renderList(buses.slice(1));
 }
 
-// ── 運行終了 or 始発カウントダウン ────────────────────
-function renderEndOfService() {
-  const now         = getEffectiveNow();
-  const msToFirst   = firstBusTime ? firstBusTime.getTime() - now : Infinity;
-  const SIXTY_MIN   = 60 * 60 * 1000;
 
-  setText('trainType', '');
-  setText('directionBadge', '');
-  setDisplay('cdArriving', 'none');
-  setDisplay('cdLabel', 'none');
 
-  const destEl = document.getElementById('destName');
-
-  if (firstBusTime && msToFirst > 0 && msToFirst <= SIXTY_MIN) {
-    // ── 始発60分前：カウントダウン ──
-    if (destEl) {
-      destEl.textContent   = '始発まであと';
-      destEl.style.color   = 'var(--text-sub)';
-      destEl.style.fontSize = '';
-    }
-    setText('departTime', `始発 ${formatHHMM(firstBusTime)} 発`);
-    setDisplay('cdNormal', 'flex');
-
-    const totalSecs = Math.floor(msToFirst / 1000);
-    setText('cdMin',   String(Math.floor(totalSecs / 60)).padStart(2, '0'));
-    setText('cdSec',   String(totalSecs % 60).padStart(2, '0'));
-    setText('cdCents', String(Math.floor((msToFirst / 1000 - totalSecs) * 100)).padStart(2, '0'));
-  } else {
-    // ── 運行終了メッセージ ──
-    if (destEl) {
-      destEl.textContent    = '本日の運行は終了しました';
-      destEl.style.color    = '#e03030';
-      destEl.style.fontSize = '20px';
-    }
-    setText('departTime', firstBusTime ? `始発 ${formatHHMM(firstBusTime)}` : '');
-    setDisplay('cdNormal', 'none');
-  }
-
-  const listArea = document.getElementById('listArea');
-  if (listArea) listArea.innerHTML =
-    '<div style="text-align:center;color:#bbb;padding:24px;font-size:13px;">翌日の時刻表は始発時刻よりご確認ください</div>';
-}
 
 // ── 次のバス表示 ──────────────────────────────────────
 function renderNextBus(bus) {
