@@ -111,9 +111,11 @@ function processTimetable(timetables) {
       const timeStr = obj['odpt:departureTime'] || obj['odpt:arrivalTime'];
       if (!timeStr) continue;
 
-      // 明日の始発候補
+      // 始発候補：今日の時刻がまだ未来なら今日、過ぎていれば明日
+      const etaToday    = timeStrToDate(timeStr, false);
       const etaTomorrow = timeStrToDate(timeStr, true);
-      if (!earliest || etaTomorrow < earliest) earliest = etaTomorrow;
+      const firstCandidate = (etaToday && etaToday.getTime() > now) ? etaToday : etaTomorrow;
+      if (!earliest || firstCandidate < earliest) earliest = firstCandidate;
 
       const eta = timeStrToDate(timeStr, false);
       if (!eta || eta.getTime() < now - 60000) continue;
