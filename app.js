@@ -295,6 +295,6 @@ function tick() {
 window.addEventListener('DOMContentLoaded', () => {
   lastTickAt = Date.now();
   fetchTimetable();
-  fetchTimer = setInterval(fetchTimetable, 30 * 60 * 1000);
+  fetchTimer = setInterval(fetchTimetable, 5 * 60 * 1000);
   tickTimer  = setInterval(tick, 50);
 });
