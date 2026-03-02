@@ -95,6 +95,7 @@ function processTimetable(timetables) {
 
     const calId   = (tt['odpt:calendar'] || '').split('Calendar:')[1] || '';
     const calType = CALENDAR_MAP[calId];
+    console.log(`[DEBUG2] pole=${pole.split('.').pop()} calId=${calId} calType=${calType} todayType=${todayType}`);
     if (!calType || calType !== todayType) continue;
 
     const objs = tt['odpt:busstopPoleTimetableObject'] || [];
