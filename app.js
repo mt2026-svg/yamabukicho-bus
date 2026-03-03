@@ -100,6 +100,8 @@ function processTimetable(timetables) {
     const calType = CALENDAR_MAP[calKey];
     console.log(`[DEBUG2] pole=${pole.split('.').pop()} calKey=${calKey} calType=${calType} todayType=${todayType}`);
     if (!calType || calType !== todayType) continue;
+
+    const objs = tt['odpt:busstopPoleTimetableObject'] || [];
     if (!objs.length) continue;
 
     const destSign = objs[0]['odpt:destinationSign'] || '';
