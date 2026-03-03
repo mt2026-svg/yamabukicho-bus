@@ -93,12 +93,13 @@ function processTimetable(timetables) {
     const pole = tt['odpt:busstopPole'] || '';
     if (!pole.includes('Yamabukicho')) continue;
 
-    const calId   = (tt['odpt:calendar'] || '').split('Calendar:')[1] || '';
-    const calType = CALENDAR_MAP[calId];
-    console.log(`[DEBUG2] pole=${pole.split('.').pop()} calId=${calId} calType=${calType} todayType=${todayType}`);
+    const calRaw  = tt['odpt:calendar'] || '';
+    const calId   = calRaw.split('odpt.Calendar:')[1] || calRaw.split('Calendar:')[1] || '';
+    // Specific.Toei.37-170 → Toei.37-170
+    const calKey  = calId.replace(/^Specific\./, '');
+    const calType = CALENDAR_MAP[calKey];
+    console.log(`[DEBUG2] pole=${pole.split('.').pop()} calKey=${calKey} calType=${calType} todayType=${todayType}`);
     if (!calType || calType !== todayType) continue;
-
-    const objs = tt['odpt:busstopPoleTimetableObject'] || [];
     if (!objs.length) continue;
 
     const destSign = objs[0]['odpt:destinationSign'] || '';
