@@ -98,7 +98,6 @@ function processTimetable(timetables) {
     // Specific.Toei.37-170 → Toei.37-170
     const calKey  = calId.replace(/^Specific\./, '');
     const calType = CALENDAR_MAP[calKey];
-    console.log(`[DEBUG2] pole=${pole.split('.').pop()} calKey=${calKey} calType=${calType} todayType=${todayType}`);
     if (!calType || calType !== todayType) continue;
 
     const objs = tt['odpt:busstopPoleTimetableObject'] || [];
@@ -140,7 +139,6 @@ function processTimetable(timetables) {
   }
 
   const total = result.shinjuku.length + result.nerima.length;
-  console.log(`[DEBUG] total=${total} earliest=${earliest ? formatHHMM(earliest) : 'none'} now=${formatHHMM(new Date(now))}`);
   if (total === 0) {
     endOfService = true;
     firstBusTime = earliest;
