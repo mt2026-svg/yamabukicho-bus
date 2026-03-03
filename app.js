@@ -22,7 +22,29 @@ function getTodayType() {
   return 'weekday';
 }
 
+// ── バス停設定 ────────────────────────────────────────
+const BUSSTOP_CONFIG = {
+  yamabukicho: {
+    poleFilter: p => p.includes('Yamabukicho'),
+    tabs: [
+      { id: 'shinjuku', label: '← 新宿駅西口' },
+      { id: 'nerima',   label: '練馬・練馬車庫前 →' },
+    ],
+    defaultTab: 'shinjuku',
+    dirFilter: s => s.includes('新宿') ? 'shinjuku' : s.includes('練馬') ? 'nerima' : null,
+  },
+  shinjuku: {
+    poleFilter: p => p.includes('ShinjukuStationNishiguchi'),
+    tabs: [
+      { id: 'nerima', label: '練馬・練馬車庫前 →' },
+    ],
+    defaultTab: 'nerima',
+    dirFilter: s => s.includes('練馬') ? 'nerima' : null,
+  },
+};
+
 // ── 状態 ──────────────────────────────────────────────
+let currentBusstop = 'yamabukicho';
 let currentTab   = 'shinjuku';
 let allArrivals  = { shinjuku: [], nerima: [] };
 let firstBusTime = null;  // 翌日始発のDate
@@ -89,9 +111,11 @@ function processTimetable(timetables) {
   const result    = { shinjuku: [], nerima: [] };
   let   earliest  = null;
 
+  const config    = BUSSTOP_CONFIG[currentBusstop];
+
   for (const tt of timetables) {
     const pole = tt['odpt:busstopPole'] || '';
-    if (!pole.includes('Yamabukicho')) continue;
+    if (!config.poleFilter(pole)) continue;
 
     const calRaw  = tt['odpt:calendar'] || '';
     const calId   = calRaw.split('odpt.Calendar:')[1] || calRaw.split('Calendar:')[1] || '';
@@ -104,7 +128,7 @@ function processTimetable(timetables) {
     if (!objs.length) continue;
 
     const destSign = objs[0]['odpt:destinationSign'] || '';
-    const dir = classifyDirection(destSign);
+    const dir = config.dirFilter(destSign);
     if (!dir) continue;
 
     const routeRaw = tt['odpt:busroute'] || tt['odpt:busroutePattern'] || '';
@@ -151,13 +175,33 @@ function processTimetable(timetables) {
   renderAll();
 }
 
+// ── バス停切り替え ────────────────────────────────────
+function switchBusstop(busstop) {
+  currentBusstop = busstop;
+  const config   = BUSSTOP_CONFIG[busstop];
+  currentTab     = config.defaultTab;
+
+  // タブを再描画
+  const tabBar = document.getElementById('tabBar');
+  if (tabBar) {
+    tabBar.innerHTML = config.tabs.map((t, i) =>
+      `<button class="tab-btn${i === 0 ? ' active' : ''}" id="tab-${t.id}" onclick="switchTab('${t.id}')">${t.label}</button>`
+    ).join('');
+  }
+
+  endOfService = false;
+  allArrivals  = { shinjuku: [], nerima: [] };
+  fetchTimetable();
+}
+
 // ── タブ ──────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  const sh = document.getElementById('tab-shinjuku');
-  const ne = document.getElementById('tab-nerima');
-  if (sh) sh.classList.toggle('active', tab === 'shinjuku');
-  if (ne) ne.classList.toggle('active', tab === 'nerima');
+  const config = BUSSTOP_CONFIG[currentBusstop];
+  config.tabs.forEach(t => {
+    const el = document.getElementById(`tab-${t.id}`);
+    if (el) el.classList.toggle('active', t.id === tab);
+  });
   renderAll();
 }
 
